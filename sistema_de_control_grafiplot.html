@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Control - Grafiplot</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- html5-qrcode for barcode/QR scanning -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <!-- jsPDF and QRCode for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+    <!-- SheetJS para exportar a Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0fdfa; /* Teal muy claro */
+            overflow-x: hidden;
+        }
+        
+        /* Custom scrollbar para contenedores internos */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        /* Scanner overrides */
+        #reader { border: none !important; border-radius: 0.5rem; overflow: hidden; margin: 0 auto; }
+        #reader video { object-fit: contain !important; width: 100% !important; max-height: 250px !important; }
+        #reader__dashboard_section_csr span { color: #374151 !important; }
+        #reader__dashboard_section_swaplink { text-decoration: none !important; color: #3b82f6 !important; }
+        #reader button {
+            background-color: #f59e0b !important;
+            color: white !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 0.375rem !important;
+            border: none !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            margin: 0.25rem !important;
+        }
+        #reader button:hover { background-color: #d97706 !important; }
+
+        .panel-registro { background-color: #eff6ff; border-color: #bfdbfe; }
+        .panel-busqueda { background-color: #fdf4ff; border-color: #fbcfe8; }
+        .panel-herramientas { background-color: #fffbeb; border-color: #fde68a; }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen w-screen flex flex-col p-2 gap-2 box-border">
+
+    <!-- VISTA VINCULADA PARA EL CLIENTE (Se activa si la URL incluye ?c=CODIGO) -->
+    <div id="client-view-container" class="hidden min-h-screen w-full flex flex-col items-center justify-center p-3 bg-slate-100">
+        <div class="bg-white max-w-md w-full rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+            <!-- Header Cliente -->
+            <div class="bg-gradient-to-r from-red-600 to-red-500 text-white p-5 text-center relative">
+                <span class="text-2xl font-black tracking-widest block drop-shadow">GRAFIPLOT</span>
+                <span class="text-xs uppercase tracking-wider opacity-90 font-medium">Estado de Pedido / Boleta Digital</span>
+                <div class="mt-2 inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>Actualización en tiempo real</span>
+                </div>
+            </div>
+
+            <!-- Contenido Dinámico del Cliente -->
+            <div id="client-receipt-content" class="p-6">
+                <div class="flex items-center justify-center py-10 text-slate-400 font-medium text-sm">
+                    Cargando información del pedido...
+                </div>
+            </div>
+
+            <!-- Footer Cliente -->
+            <div class="bg-slate-50 border-t border-slate-100 p-4 text-center">
+                <p class="text-xs text-slate-500 font-medium">Grafiplot — Impresiones y Planos</p>
+                <p class="text-[11px] text-slate-400">Celular: 952 628 844</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA PRINCIPAL DEL ADMINISTRADOR -->
+    <div id="admin-view-container" class="flex flex-col h-screen w-full gap-2">
+        <!-- Navegación Superior -->
+        <nav class="bg-gradient-to-r from-red-600 to-red-500 text-white p-3 rounded-xl shadow-md flex justify-between items-center shrink-0 h-16">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl font-black tracking-widest text-white ml-2 drop-shadow-md">GRAFIPLOT</span>
+                <h1 class="text-lg md:text-xl font-medium hidden sm:block border-l-2 border-white/30 pl-3 ml-2">Control</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="status-indicator" class="flex items-center gap-2 text-xs md:text-sm bg-white text-red-600 font-bold px-3 py-1.5 rounded-full shadow-inner">
+                    <div class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" id="status-dot"></div>
+                    <span id="status-text">Conectando...</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Contenedor Principal Estático -->
+        <main class="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-2 min-h-0">
+            
+            <!-- COLUMNA IZQUIERDA: Registro y Herramientas -->
+            <div class="lg:col-span-4 flex flex-col gap-2 h-full min-h-0">
+                
+                <!-- Panel de Registro -->
+                <div class="panel-registro p-4 rounded-xl shadow-sm border flex-1 flex flex-col min-h-0">
+                    <h2 class="text-base font-bold text-blue-800 border-b border-blue-200 pb-2 mb-3 flex items-center gap-2 shrink-0">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        Nuevo Registro
+                    </h2>
+                    
+                    <form id="register-form" class="flex flex-col gap-2 flex-1 overflow-y-auto custom-scroll pr-1">
+                        <div>
+                            <label class="block text-xs font-bold text-blue-900 mb-1">Nombre Completo</label>
+                            <input type="text" id="reg-nombre" oninput="this.value = this.value.toUpperCase()" required class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm" placeholder="Ej. JUAN PÉREZ">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-bold text-blue-900 mb-1">Celular</label>
+                            <input type="tel" id="reg-celular" required class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm" placeholder="Ej. 952628844">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-blue-900 mb-1">Descripción del Trabajo</label>
+                            <textarea id="reg-descripcion" rows="2" class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm custom-scroll" placeholder="Ej. Impresión de planos A1..."></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-bold text-blue-900 mb-1">Cant. Hojas</label>
+                                <input type="number" id="reg-hojas" min="1" value="1" required class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm" placeholder="1">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-blue-900 mb-1">Codificación Libre</label>
+                                <select id="reg-codigo" required class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm font-mono font-bold bg-white cursor-pointer">
+                                    <option value="" disabled selected>Cargando...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-blue-900 mb-1">Ubicación</label>
+                            <select id="reg-ubicacion" required class="w-full p-2 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-white cursor-pointer">
+                                <option value="E1">Estante 1 (E1)</option>
+                                <option value="E2">Estante 2 (E2)</option>
+                                <option value="E3">Estante 3 (E3)</option>
+                                <option value="E4">Estante 4 (E4)</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2 border-t-2 border-blue-100 pt-2 mt-1">
+                            <div>
+                                <label class="block text-[10px] font-bold text-blue-900 mb-1 leading-tight">Precio Total (S/)</label>
+                                <input type="number" id="reg-precio" step="0.10" required class="w-full p-1.5 border-2 border-blue-200 rounded-lg focus:ring-0 focus:border-blue-500 outline-none transition-all text-sm text-center font-bold" placeholder="0.00">
+                            </div>
+                            <div>
+                                <label class="flex items-center gap-1 text-[10px] font-bold text-blue-900 mb-1 leading-tight cursor-pointer">
+                                    <input type="checkbox" id="toggle-pago" class="w-3 h-3 cursor-pointer">
+                                    A Cuenta (S/)
+                                </label>
+                                <input type="number" id="reg-pago" step="0.10" disabled class="w-full p-1.5 border-2 border-gray-200 bg-gray-100 rounded-lg outline-none transition-all text-sm text-center font-bold" placeholder="0.00">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-blue-900 mb-1 leading-tight">Cambio/Falta</label>
+                                <input type="text" id="reg-cambio" readonly class="w-full p-1.5 border-2 border-blue-200 rounded-lg bg-blue-50 outline-none transition-all text-sm text-center font-bold text-blue-800" placeholder="0.00">
+                            </div>
+                        </div>
+
+                        <div class="mt-auto pt-2 shrink-0">
+                            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition-colors flex justify-center items-center gap-2 shadow-md">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                                Guardar Registro
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Panel de Herramientas -->
+                <div class="panel-herramientas p-3 rounded-xl shadow-sm border shrink-0">
+                     <div class="flex flex-col gap-2">
+                        <button onclick="exportToExcel()" class="w-full bg-green-100 hover:bg-green-200 text-green-800 font-bold py-2 rounded-lg transition-colors flex justify-center items-center gap-2 border border-green-300 text-sm shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            Exportar a Excel (Respaldo)
+                        </button>
+                        <button onclick="openLinksModal()" class="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-1.5 rounded-lg transition-colors flex justify-center items-center gap-2 border border-blue-300 text-xs shadow-sm">
+                            🔗 Configurar Links (1-100)
+                        </button>
+                        <button onclick="showClearModal()" class="w-full bg-red-100 hover:bg-red-200 text-red-700 font-bold py-1.5 rounded-lg transition-colors flex justify-center items-center gap-2 border border-red-300 text-xs shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Limpiar Datos
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUMNA DERECHA: Búsqueda y Resultados -->
+            <div class="lg:col-span-8 panel-busqueda rounded-xl shadow-sm border p-4 flex flex-col h-full min-h-0">
+                
+                <h2 class="text-base font-bold text-fuchsia-800 border-b border-fuchsia-200 pb-2 mb-3 flex items-center gap-2 shrink-0">
+                    <svg class="w-5 h-5 text-fuchsia-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    Buscador y Escáner
+                </h2>
+                
+                <!-- Barra de búsqueda y botón de cámara -->
+                <div class="flex flex-col sm:flex-row gap-2 mb-3 shrink-0">
+                    <div class="flex-1 relative">
+                        <input type="text" id="search-input" placeholder="Buscar por código, celular o nombre..." class="w-full pl-9 p-2.5 border-2 border-fuchsia-200 rounded-lg focus:ring-0 focus:border-fuchsia-500 outline-none transition-all text-sm font-semibold bg-white shadow-sm">
+                        <svg class="w-5 h-5 text-fuchsia-400 absolute left-2.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <button onclick="toggleScanner()" id="btn-scanner" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-2.5 px-4 rounded-lg transition-colors flex justify-center items-center gap-2 whitespace-nowrap shadow-md">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+                        <span id="scanner-btn-text">Escanear</span>
+                    </button>
+                </div>
+
+                <!-- Contenedor del Escáner (Oculto) -->
+                <div id="scanner-container" class="hidden w-full max-w-xs mx-auto mb-3 bg-white border-2 border-dashed border-fuchsia-300 rounded-lg p-2 shrink-0 shadow-inner">
+                    <div id="reader" class="w-full"></div>
+                    <button onclick="toggleScanner()" class="mt-2 w-full bg-red-100 text-red-700 font-bold hover:bg-red-200 py-1.5 rounded flex justify-center items-center gap-2 text-sm">
+                        Cerrar Cámara
+                    </button>
+                </div>
+
+                <!-- Lista de Resultados -->
+                <div class="flex justify-between items-center mb-1 shrink-0">
+                    <h3 class="text-xs font-bold text-fuchsia-700 uppercase tracking-wider">Registros (<span id="results-count">0</span>)</h3>
+                </div>
+                
+                <div id="results-container" class="flex-1 overflow-y-auto custom-scroll space-y-2 pr-1 pb-2">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center text-fuchsia-400 p-6 text-sm font-medium border-2 border-dashed border-fuchsia-200 rounded-xl bg-white/50">
+                            Los registros aparecerán aquí.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Modales -->
+    <!-- Modal Confirmar Limpieza -->
+    <div id="clear-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform" id="clear-modal-content">
+            <div class="flex items-center justify-center w-14 h-14 mx-auto bg-red-100 rounded-full mb-4">
+                <svg class="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-center text-gray-900 mb-2">¡Atención!</h3>
+            <p class="text-sm text-center text-gray-600 mb-6 font-medium">Vas a borrar TODOS los registros del sistema. Esta acción no se puede deshacer.</p>
+            <div class="flex gap-3">
+                <button onclick="hideClearModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 rounded-xl transition-colors">Cancelar</button>
+                <button onclick="executeClearData()" id="btn-confirm-clear" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg">
+                    Borrar Todo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Eliminar Un Solo Registro -->
+    <div id="delete-single-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform">
+            <div class="flex items-center justify-center w-14 h-14 mx-auto bg-red-100 rounded-full mb-4">
+                <svg class="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-center text-gray-900 mb-2">Eliminar Registro</h3>
+            <p class="text-sm text-center text-gray-600 mb-6 font-medium">¿Estás seguro que deseas eliminar este registro de la base de datos?</p>
+            <input type="hidden" id="delete-id-input">
+            <div class="flex gap-3">
+                <button onclick="hideDeleteSingleModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 rounded-xl transition-colors">Cancelar</button>
+                <button onclick="executeSingleDelete()" id="btn-confirm-single-delete" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg">
+                    Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ayuda Cámara -->
+    <div id="camera-error-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform">
+            <div class="flex items-center justify-center w-14 h-14 mx-auto bg-amber-100 rounded-full mb-4">
+                <svg class="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-center text-gray-900 mb-2">Cámara Bloqueada</h3>
+            <p class="text-sm text-center text-gray-600 mb-4 font-medium">
+                Para usar la cámara en tu celular, debes abrir la página web desde tu enlace de <b>GitHub Pages (HTTPS)</b>.<br><br>
+                Si abres el archivo descargado directamente desde el almacenamiento de tu celular, Google Chrome bloqueará la cámara por seguridad.
+            </p>
+            <button onclick="hideCameraErrorModal()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg">Entendido</button>
+        </div>
+    </div>
+
+    <!-- Modal Resultado Escaneo / Detalle Pedido (Diseño actualizado según imagen) -->
+    <div id="scan-result-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform relative" id="scan-result-content">
+            <!-- Contenido dinámico inyectado por JS -->
+        </div>
+    </div>
+
+    <!-- Modal Configuración de Enlaces (1 al 100) -->
+    <div id="links-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 transform scale-95 transition-transform flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-xl font-black text-gray-900 flex items-center gap-2">
+                    🔗 Enlaces por Código
+                </h3>
+                <button onclick="closeLinksModal()" class="text-gray-400 hover:text-red-500 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">Ingresa el link específico al que será dirigido cada código (Google Drive, otra web, etc.)</p>
+            
+            <div id="links-list-container" class="flex-1 overflow-y-auto custom-scroll pr-2 space-y-2 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <!-- Inputs generados dinámicamente -->
+            </div>
+
+            <div class="flex gap-3 pt-3 border-t">
+                <button onclick="closeLinksModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2.5 rounded-xl transition-colors text-sm">Cancelar</button>
+                <button onclick="saveCustomLinks()" id="btn-save-links" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-lg text-sm">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor Toast -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- Canvas ocultos para PDFs / QR -->
+    <canvas id="barcode-canvas" class="hidden"></canvas>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, serverTimestamp, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CREDENCIALES DE FIREBASE
+        const tuConfiguracionFirebase = {
+            apiKey: "AIzaSyBV8aEI3vLAmOIOJ8Fe6r3E35FZKn9tPI4",
+            authDomain: "administrador-de-travajos-im.firebaseapp.com",
+            projectId: "administrador-de-travajos-im",
+            storageBucket: "administrador-de-travajos-im.firebasestorage.app",
+            messagingSenderId: "1072897626355",
+            appId: "1:1072897626355:web:9c7c6d750a9135136f2786",
+            measurementId: "G-960180WKR3"
+        };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'app-registro-grafiplot';
+        
+        const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config !== null 
+            ? JSON.parse(__firebase_config) 
+            : tuConfiguracionFirebase;
+        
+        let db, auth;
+        let records = []; 
+        let customLinks = {}; // Almacena los links de los 100 códigos
+        let html5QrcodeScanner = null;
+        let isScannerRunning = false;
+        let editingRecordId = null;
+        let clientModeCode = null;
+        
+        const TOTAL_CODES = 100;
+
+        function calcularCambio() {
+            const precio = parseFloat(document.getElementById('reg-precio').value) || 0;
+            const pago = parseFloat(document.getElementById('reg-pago').value) || 0;
+            const cambio = pago - precio;
+            const inputCambio = document.getElementById('reg-cambio');
+            
+            if (!inputCambio) return;
+
+            if (cambio < 0) {
+                inputCambio.value = "Falta " + Math.abs(cambio).toFixed(2);
+                inputCambio.classList.add('text-red-600', 'bg-red-50', 'border-red-300');
+                inputCambio.classList.remove('text-blue-800', 'bg-blue-50', 'border-blue-200');
+            } else {
+                inputCambio.value = cambio.toFixed(2);
+                inputCambio.classList.remove('text-red-600', 'bg-red-50', 'border-red-300');
+                inputCambio.classList.add('text-blue-800', 'bg-blue-50', 'border-blue-200');
+            }
+        }
+
+        async function initApp() {
+            // Verificar si el usuario ingresó a la vista de cliente por la URL (?c=001)
+            const urlParams = new URLSearchParams(window.location.search);
+            clientModeCode = urlParams.get('c') || urlParams.get('codigo');
+
+            if (clientModeCode) {
+                // Modo Cliente (Subpágina)
+                document.getElementById('admin-view-container').classList.add('hidden');
+                document.getElementById('client-view-container').classList.remove('hidden');
+            } else {
+                updateAvailableCodesSelect();
+            }
+
+            if (!firebaseConfig) {
+                showToast("Error de Configuración BD", "error");
+                updateStatus("Error BD", "bg-red-500");
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (authToken) await signInWithCustomToken(auth, authToken);
+                else await signInAnonymously(auth);
+                
+                // Suscripción a los enlaces personalizados de los códigos
+                const linksColl = collection(db, 'artifacts', appId, 'public', 'data', 'enlaces');
+                onSnapshot(linksColl, (snapshot) => {
+                    customLinks = {};
+                    snapshot.forEach(doc => {
+                        customLinks[doc.id] = doc.data().url;
+                    });
+                }, (error) => console.error("Error cargando enlaces:", error));
+
+                const collPath = collection(db, 'artifacts', appId, 'public', 'data', 'registros');
+                
+                // Suscripción en Tiempo Real (Real-time snapshot binding)
+                onSnapshot(collPath, (snapshot) => {
+                    records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    records.sort((a, b) => {
+                        let timeA = a.createdAt?.toMillis() || 0;
+                        let timeB = b.createdAt?.toMillis() || 0;
+                        return timeB - timeA;
+                    });
+
+                    try {
+                        localStorage.setItem('grafiplot_backup_records', JSON.stringify(records));
+                    } catch(e) { console.warn("No se pudo guardar backup local", e); }
+
+                    updateStatus("Conectado", "bg-green-500", "text-green-700");
+
+                    if (clientModeCode) {
+                        // Renderizar subpágina de cliente en tiempo real cuando cambien datos en Firebase
+                        renderClientSubpage(clientModeCode);
+                    } else {
+                        updateAvailableCodesSelect();
+                        handleSearch();
+                    }
+                }, (error) => {
+                    console.error(error);
+                    updateStatus("Desconectado", "bg-red-500", "text-red-700");
+                });
+
+            } catch (error) {
+                console.error(error);
+                updateStatus("Error", "bg-red-500", "text-red-700");
+            }
+        }
+
+        function renderClientSubpage(targetCode) {
+            const clientContainer = document.getElementById('client-receipt-content');
+            if (!clientContainer) return;
+
+            const codeFormatted = String(targetCode).trim().padStart(3, '0');
+            const record = records.find(r => String(r.codigo).trim().padStart(3, '0') === codeFormatted);
+
+            if (!record) {
+                clientContainer.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                        <h3 class="text-lg font-black text-slate-800">Pedido No Encontrado</h3>
+                        <p class="text-sm text-slate-500 mt-1">El código <span class="font-mono font-bold text-slate-700">${codeFormatted}</span> no está registrado en el sistema o fue eliminado.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const precio = Number(record.precio || 0);
+            const pago = Number(record.pago || 0);
+            const cambio = pago - precio;
+            const falta = cambio < 0;
+
+            clientContainer.innerHTML = `
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Código de Trabajo</span>
+                        <span class="text-4xl font-black text-slate-900 font-mono tracking-tight">${record.codigo}</span>
+                    </div>
+                    <div class="bg-blue-100 text-blue-800 px-3.5 py-1.5 rounded-xl font-bold text-sm border border-blue-200 shadow-sm">
+                        📍 Ubicación: ${record.ubicacion}
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 mb-4">
+                    <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cliente</span>
+                        <span class="font-bold text-slate-900 text-base block">${record.nombre}</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2">
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Celular</span>
+                            <span class="font-medium text-slate-800 text-sm">📱 ${record.celular}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Hojas</span>
+                            <span class="font-medium text-slate-800 text-sm">📄 ${record.hojas}</span>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-200 pt-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Descripción del Trabajo</span>
+                        <p class="text-sm text-slate-700 italic mt-0.5 font-medium leading-relaxed">${record.descripcion || 'Sin descripción'}</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 text-white p-4 rounded-2xl shadow-inner space-y-2 mb-4">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400 font-medium">Precio Total:</span>
+                        <span class="font-bold text-lg">S/ ${precio.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400 font-medium">A Cuenta:</span>
+                        <span class="font-semibold text-emerald-400">S/ ${pago.toFixed(2)}</span>
+                    </div>
+                    <div class="border-t border-slate-700 pt-2 flex justify-between items-center">
+                        <span class="font-bold text-slate-300">${falta ? 'Monto Pendiente:' : 'Vuelto:'}</span>
+                        <span class="font-black text-xl px-3 py-0.5 rounded-lg ${falta ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
+                            S/ ${Math.abs(cambio).toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+
+                <a href="https://wa.me/51952628844?text=${encodeURIComponent(`Hola Grafiplot, tengo una consulta sobre mi trabajo código ${record.codigo}`)}" target="_blank" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors shadow-lg text-sm flex justify-center items-center gap-2">
+                    💬 Consultar por WhatsApp
+                </a>
+            `;
+        }
+
+        function updateAvailableCodesSelect() {
+            const selectEl = document.getElementById('reg-codigo');
+            if (!selectEl) return;
+
+            const currentSelected = selectEl.value;
+            const usedCodes = records.map(r => r.codigo);
+            
+            let editingCode = null;
+            if (editingRecordId) {
+                const rec = records.find(r => r.id === editingRecordId);
+                if (rec) editingCode = rec.codigo;
+            }
+
+            selectEl.innerHTML = '';
+            let firstAvailable = null;
+            let availableCount = 0;
+
+            for (let i = 1; i <= TOTAL_CODES; i++) {
+                const codeStr = String(i).padStart(3, '0');
+                if (!usedCodes.includes(codeStr) || codeStr === editingCode) {
+                    availableCount++;
+                    const option = document.createElement('option');
+                    option.value = codeStr;
+                    option.textContent = `Código: ${codeStr}`;
+                    selectEl.appendChild(option);
+                    
+                    if (!firstAvailable) firstAvailable = codeStr;
+                }
+            }
+
+            if (availableCount === 0) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.textContent = "No hay códigos libres (1-100)";
+                opt.disabled = true;
+                selectEl.appendChild(opt);
+                selectEl.classList.add('bg-red-50', 'text-red-600');
+            } else {
+                selectEl.classList.remove('bg-red-50', 'text-red-600');
+                if (currentSelected && (!usedCodes.includes(currentSelected) || currentSelected === editingCode)) {
+                    selectEl.value = currentSelected;
+                } else if (firstAvailable) {
+                    selectEl.value = firstAvailable;
+                }
+            }
+        }
+
+        function updateStatus(text, bgClass, textClass = "text-gray-800") {
+            const el = document.getElementById('status-indicator');
+            if (!el) return;
+            document.getElementById('status-text').textContent = text;
+            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${bgClass} animate-pulse`;
+            el.className = `flex items-center gap-2 text-xs md:text-sm font-bold px-3 py-1.5 rounded-full shadow-inner ${textClass} bg-white`;
+        }
+
+        window.showToast = function(message, type = "success") {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bgColor = type === "success" ? "bg-green-500" : "bg-red-500";
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-xl transform transition-all duration-300 -translate-y-10 opacity-0 flex items-center gap-3 font-bold text-sm z-50`;
+            toast.innerHTML = `<span class="text-lg">${type === 'success' ? '✓' : '⚠'}</span> ${message}`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('-translate-y-10', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('-translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!auth || !auth.currentUser) {
+                showToast("Base de datos no disponible todavía", "error");
+                return;
+            }
+
+            const codeSelect = document.getElementById('reg-codigo');
+            if (!codeSelect.value) {
+                showToast("No hay códigos libres seleccionados", "error");
+                return;
+            }
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Guardando...';
+
+            const data = {
+                nombre: document.getElementById('reg-nombre').value.trim().toUpperCase(),
+                celular: document.getElementById('reg-celular').value.trim(),
+                descripcion: document.getElementById('reg-descripcion').value.trim(),
+                hojas: parseInt(document.getElementById('reg-hojas').value) || 1,
+                codigo: codeSelect.value,
+                ubicacion: document.getElementById('reg-ubicacion').value,
+                precio: parseFloat(document.getElementById('reg-precio').value) || 0,
+                pago: parseFloat(document.getElementById('reg-pago').value) || 0
+            };
+
+            try {
+                if (editingRecordId) {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'registros', editingRecordId);
+                    await updateDoc(docRef, data);
+                    showToast(`Registro actualizado (${data.codigo})`);
+                    
+                    editingRecordId = null;
+                    submitBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 00-2 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> Guardar Registro`;
+                    submitBtn.classList.replace('bg-orange-600', 'bg-blue-600');
+                    submitBtn.classList.replace('hover:bg-orange-700', 'hover:bg-blue-700');
+                } else {
+                    data.createdAt = serverTimestamp();
+                    const collPath = collection(db, 'artifacts', appId, 'public', 'data', 'registros');
+                    await addDoc(collPath, data);
+                    showToast(`Registrado con código ${data.codigo}`);
+                }
+
+                // Limpiar formulario
+                document.getElementById('register-form').reset();
+                document.getElementById('reg-hojas').value = 1;
+                document.getElementById('toggle-pago').checked = false;
+                const inpPago = document.getElementById('reg-pago');
+                inpPago.disabled = true;
+                inpPago.value = '';
+                inpPago.classList.add('bg-gray-100', 'border-gray-200');
+                inpPago.classList.remove('border-blue-200', 'focus:ring-0', 'focus:border-blue-500');
+                calcularCambio();
+                updateAvailableCodesSelect();
+
+            } catch (error) {
+                console.error("Error guardando registro:", error);
+                showToast("Error al guardar el registro", "error");
+            } finally {
+                submitBtn.disabled = false;
+                if (!editingRecordId) {
+                    submitBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> Guardar Registro`;
+                }
+            }
+        });
+
+        async function generatePureQRCode(canvas, text) {
+            await QRCode.toCanvas(canvas, text, {
+                errorCorrectionLevel: 'M',
+                margin: 2,
+                width: 320,
+                color: { dark: '#000000', light: '#FFFFFF' }
+            });
+        }
+
+        window.editRecord = function(id) {
+            const record = records.find(r => r.id === id);
+            if (!record) return;
+
+            editingRecordId = id;
+            document.getElementById('reg-nombre').value = record.nombre || '';
+            document.getElementById('reg-celular').value = record.celular || '';
+            document.getElementById('reg-descripcion').value = record.descripcion || '';
+            document.getElementById('reg-hojas').value = record.hojas || 1;
+            document.getElementById('reg-ubicacion').value = record.ubicacion || 'E1';
+            document.getElementById('reg-precio').value = record.precio || '';
+            
+            const inpPago = document.getElementById('reg-pago');
+            const chkToggle = document.getElementById('toggle-pago');
+            
+            if (record.pago !== undefined && record.pago !== null && record.pago !== '') {
+                chkToggle.checked = true;
+                inpPago.disabled = false;
+                inpPago.classList.remove('bg-gray-100', 'border-gray-200');
+                inpPago.classList.add('border-blue-200', 'focus:ring-0', 'focus:border-blue-500');
+                inpPago.value = record.pago;
+            } else {
+                chkToggle.checked = false;
+                inpPago.disabled = true;
+                inpPago.classList.add('bg-gray-100', 'border-gray-200');
+                inpPago.classList.remove('border-blue-200', 'focus:ring-0', 'focus:border-blue-500');
+                inpPago.value = '';
+            }
+
+            calcularCambio();
+            updateAvailableCodesSelect();
+            document.getElementById('reg-codigo').value = record.codigo;
+
+            const submitBtn = document.querySelector('#register-form button[type="submit"]');
+            submitBtn.innerHTML = `✏️ Actualizar Registro`;
+            submitBtn.classList.replace('bg-blue-600', 'bg-orange-600');
+            submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-orange-700');
+
+            document.querySelector('.panel-registro').scrollTo({top: 0, behavior: 'smooth'});
+            showToast("Modo edición activado", "success");
+        };
+
+        window.openLinksModal = function() {
+            const container = document.getElementById('links-list-container');
+            container.innerHTML = '';
+            for(let i=1; i<=100; i++) {
+                const code = String(i).padStart(3, '0');
+                const val = customLinks[code] || '';
+                container.innerHTML += `
+                    <div class="flex items-center gap-2 mb-1 bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                        <span class="font-mono font-black text-blue-800 bg-blue-100 px-2 py-1 rounded w-12 text-center text-xs">${code}</span>
+                        <input type="url" id="link-input-${code}" value="${val}" class="flex-1 p-1.5 border-2 border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500" placeholder="https://ejemplo.com/archivo-${code}">
+                    </div>
+                `;
+            }
+            document.getElementById('links-modal').classList.remove('hidden');
+        };
+
+        window.closeLinksModal = function() {
+            document.getElementById('links-modal').classList.add('hidden');
+        };
+
+        window.saveCustomLinks = async function() {
+            const btn = document.getElementById('btn-save-links');
+            btn.disabled = true;
+            btn.innerHTML = 'Guardando...';
+            try {
+                const promises = [];
+                for(let i=1; i<=100; i++) {
+                    const code = String(i).padStart(3, '0');
+                    const input = document.getElementById(`link-input-${code}`);
+                    if (input) {
+                        const newVal = input.value.trim();
+                        const oldVal = customLinks[code] || '';
+                        
+                        if (newVal !== oldVal) {
+                            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'enlaces', code);
+                            if (newVal === '') {
+                                promises.push(deleteDoc(docRef));
+                            } else {
+                                promises.push(setDoc(docRef, { url: newVal }));
+                            }
+                        }
+                    }
+                }
+                if(promises.length > 0) {
+                    await Promise.all(promises);
+                }
+                showToast("Enlaces actualizados correctamente", "success");
+                closeLinksModal();
+            } catch (e) {
+                console.error(e);
+                showToast("Error al guardar enlaces", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Guardar Cambios';
+            }
+        };
+
+        window.copyClientLink = function(codigo) {
+            const fullLink = customLinks[codigo];
+            
+            if (!fullLink) {
+                showToast(`El código ${codigo} no tiene un link configurado en los ajustes.`, "error");
+                return;
+            }
+
+            const tempInput = document.createElement("textarea");
+            tempInput.value = fullLink;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand("copy");
+            document.body.removeChild(tempInput);
+
+            showToast("Link copiado al portapapeles", "success");
+        };
+
+        window.sendWaLink = function(codigo, celular, nombre) {
+            const fullLink = customLinks[codigo];
+            
+            if (!fullLink) {
+                showToast(`El código ${codigo} no tiene un link configurado en los ajustes.`, "error");
+                return;
+            }
+            
+            const cleanPhone = (celular || '').replace(/\D/g, '');
+            const waNumber = (cleanPhone.length === 9 && cleanPhone.startsWith('9')) ? '51' + cleanPhone : cleanPhone;
+            
+            const mensaje = encodeURIComponent(`Hola ${nombre || ''}, puedes ver el detalle de tu pedido en el siguiente enlace: ${fullLink}`);
+            const waUrl = waNumber ? `https://wa.me/${waNumber}?text=${mensaje}` : `https://wa.me/?text=${mensaje}`;
+            
+            window.open(waUrl, '_blank');
+        };
+
+        window.confirmDeleteSingle = function(id) {
+            document.getElementById('delete-id-input').value = id;
+            document.getElementById('delete-single-modal').classList.remove('hidden');
+        };
+
+        window.hideDeleteSingleModal = () => document.getElementById('delete-single-modal').classList.add('hidden');
+        window.hideCameraErrorModal = () => document.getElementById('camera-error-modal').classList.add('hidden');
+
+        window.executeSingleDelete = async function() {
+            const id = document.getElementById('delete-id-input').value;
+            if (!id || !auth || !auth.currentUser) return;
+            
+            const btn = document.getElementById('btn-confirm-single-delete');
+            btn.disabled = true; btn.innerHTML = 'Eliminando...';
+            
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registros', id));
+                showToast("Registro eliminado");
+                hideDeleteSingleModal();
+            } catch (error) {
+                showToast("Error al borrar", "error");
+            } finally {
+                btn.disabled = false; btn.innerHTML = 'Eliminar';
+            }
+        };
+
+        window.generateReceiptPDF = async function(recordId, action = 'download') {
+            const record = records.find(r => r.id === recordId);
+            if (!record) return;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a6" });
+                
+                doc.setFillColor(227, 24, 55); 
+                doc.rect(0, 0, 105, 18, 'F');
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(22);
+                doc.setTextColor(255, 255, 255);
+                doc.text("GRAFIPLOT", 52.5, 13, { align: "center" });
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(10);
+                doc.setTextColor(50);
+                doc.text("CONTROL DE ARCHIVOS", 10, 26);
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "normal");
+                doc.text("Celular: 952 628 844", 10, 31);
+
+                doc.setDrawColor(200);
+                doc.line(10, 34, 95, 34);
+
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(12);
+                doc.setTextColor(0);
+                doc.text("TICKET DE REGISTRO", 10, 42);
+
+                const startY = 50;
+                const lineHeight = 6.5;
+                doc.setFontSize(10);
+                
+                doc.setFont("helvetica", "bold");
+                doc.text("CÓDIGO:", 10, startY);
+                doc.setFont("helvetica", "normal");
+                doc.text(record.codigo, 40, startY);
+
+                doc.setFont("helvetica", "bold");
+                doc.text("NOMBRE:", 10, startY + lineHeight);
+                doc.setFont("helvetica", "normal");
+                doc.text(record.nombre.substring(0, 25), 40, startY + lineHeight);
+
+                doc.setFont("helvetica", "bold");
+                doc.text("CELULAR:", 10, startY + (lineHeight*2));
+                doc.setFont("helvetica", "normal");
+                doc.text(record.celular, 40, startY + (lineHeight*2));
+
+                doc.setFont("helvetica", "bold");
+                doc.text("UBICACIÓN:", 10, startY + (lineHeight*3));
+                doc.setFont("helvetica", "normal");
+                doc.text(record.ubicacion, 40, startY + (lineHeight*3));
+
+                doc.setFont("helvetica", "bold");
+                doc.text("DESCRIP.:", 10, startY + (lineHeight*4));
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "normal");
+                const descStr = (record.descripcion || 'Ninguna').substring(0, 40);
+                doc.text(descStr, 40, startY + (lineHeight*4));
+                doc.setFontSize(10);
+
+                doc.setFillColor(245, 245, 245);
+                doc.rect(10, startY + (lineHeight*5), 85, 22, 'F');
+
+                doc.setFont("helvetica", "bold");
+                doc.text("PRECIO TOTAL:", 12, startY + (lineHeight*6));
+                doc.text("S/ " + Number(record.precio || 0).toFixed(2), 65, startY + (lineHeight*6));
+
+                doc.text("A CUENTA:", 12, startY + (lineHeight*7));
+                doc.text("S/ " + Number(record.pago || 0).toFixed(2), 65, startY + (lineHeight*7));
+
+                const cambioCalc = (record.pago || 0) - (record.precio || 0);
+                if (cambioCalc < 0) {
+                    doc.setTextColor(200, 0, 0);
+                    doc.text("FALTA PAGAR:", 12, startY + (lineHeight*8));
+                    doc.text("S/ " + Math.abs(cambioCalc).toFixed(2), 65, startY + (lineHeight*8));
+                } else {
+                    doc.setTextColor(0, 100, 0);
+                    doc.text("CAMBIO:", 12, startY + (lineHeight*8));
+                    doc.text("S/ " + Math.abs(cambioCalc).toFixed(2), 65, startY + (lineHeight*8));
+                }
+
+                doc.setTextColor(100);
+                
+                let dateStr = "";
+                if(record.createdAt) {
+                    const d = record.createdAt.toDate ? record.createdAt.toDate() : new Date(record.createdAt);
+                    dateStr = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+                } else {
+                    dateStr = new Date().toLocaleDateString();
+                }
+                
+                doc.setFontSize(8);
+                doc.text("Fecha: " + dateStr, 10, startY + (lineHeight*9.5));
+
+                const canvasBC = document.getElementById('barcode-canvas');
+                await generatePureQRCode(canvasBC, record.codigo);
+                
+                const qrSize = 26;
+                const qrX = (105 - qrSize) / 2;
+                doc.addImage(canvasBC.toDataURL("image/jpeg"), 'JPEG', qrX, 110, qrSize, qrSize);
+                
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(8);
+                doc.setTextColor(100);
+                doc.text(`CÓDIGO: ${record.codigo}`, 52.5, 139, { align: "center" });
+
+                doc.setDrawColor(227, 24, 55);
+                doc.setLineWidth(0.5);
+                doc.rect(5, 5, 95, 138);
+
+                if (action === 'print') {
+                    doc.autoPrint();
+                    window.open(doc.output('bloburl'), '_blank');
+                    showToast("Abriendo ticket para imprimir...", "success");
+                } else {
+                    doc.save(`Recibo_Grafiplot_${record.codigo}.pdf`);
+                    showToast("Recibo descargado.");
+                }
+            } catch (err) {
+                console.error("Error generando recibo", err);
+                showToast("Error al crear el recibo.", "error");
+            }
+        };
+
+        window.exportToExcel = function() {
+            try {
+                if (records.length === 0) {
+                    showToast("No hay datos para exportar", "error");
+                    return;
+                }
+
+                showToast("Generando Excel...", "success");
+
+                const dataParaExcel = records.map(r => {
+                    let fechaStr = "";
+                    if(r.createdAt) {
+                        const d = r.createdAt.toDate ? r.createdAt.toDate() : new Date(r.createdAt);
+                        fechaStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    } else {
+                        fechaStr = "Desconocida";
+                    }
+
+                    const saldo = (r.pago || 0) - (r.precio || 0);
+                    const estadoDeuda = saldo < 0 ? "DEBE" : "CANCELADO / VUELTO";
+
+                    return {
+                        "Código": r.codigo,
+                        "Nombre Cliente": r.nombre,
+                        "Celular": r.celular,
+                        "Descripción del Trabajo": r.descripcion || "",
+                        "Cant. Hojas": r.hojas,
+                        "Ubicación": r.ubicacion,
+                        "Precio Total (S/)": Number(r.precio || 0).toFixed(2),
+                        "A Cuenta (S/)": Number(r.pago || 0).toFixed(2),
+                        "Saldo (S/)": Math.abs(saldo).toFixed(2),
+                        "Estado": estadoDeuda,
+                        "Fecha de Registro": fechaStr
+                    };
+                });
+
+                const ws = XLSX.utils.json_to_sheet(dataParaExcel);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Registros");
+
+                ws['!cols'] = [
+                    {wch: 10}, {wch: 30}, {wch: 15}, {wch: 50}, 
+                    {wch: 12}, {wch: 12}, {wch: 18}, {wch: 15}, 
+                    {wch: 15}, {wch: 22}, {wch: 20}
+                ];
+
+                const fechaHoy = new Date().toISOString().split('T')[0];
+                XLSX.writeFile(wb, `Respaldo_Grafiplot_${fechaHoy}.xlsx`);
+                showToast("Excel descargado correctamente", "success");
+
+            } catch (error) {
+                console.error("Error al exportar a Excel:", error);
+                showToast("Error al generar Excel", "error");
+            }
+        };
+
+        window.showClearModal = () => document.getElementById('clear-modal').classList.remove('hidden');
+        window.hideClearModal = () => document.getElementById('clear-modal').classList.add('hidden');
+        
+        window.showScanResultModal = function(decodedText) {
+            const rawText = (decodedText || '').trim();
+            
+            let record = records.find(r => r.codigo === rawText || (r.codigo && r.codigo.toLowerCase() === rawText.toLowerCase()));
+            
+            if (!record && !isNaN(rawText) && rawText.length > 0) {
+                const padded = String(parseInt(rawText, 10)).padStart(3, '0');
+                record = records.find(r => r.codigo === padded);
+            }
+
+            const contentDiv = document.getElementById('scan-result-content');
+            if (!contentDiv) return;
+
+            if (record) {
+                const precio = Number(record.precio || 0);
+                const pago = Number(record.pago || 0);
+                const cambio = pago - precio;
+                const falta = cambio < 0;
+
+                contentDiv.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">CÓDIGO LEÍDO</span>
+                            <div class="text-3xl font-black text-gray-900 font-mono tracking-tight">${record.codigo}</div>
+                        </div>
+                        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-xl font-bold text-sm border border-blue-200">
+                            ${record.ubicacion}
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50/80 rounded-2xl p-4 border border-gray-100 space-y-3 mb-5">
+                        <div>
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">CLIENTE</span>
+                            <div class="font-bold text-gray-900 text-base">${record.nombre}</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">CELULAR</span>
+                                <div class="font-medium text-gray-800 flex items-center gap-1.5 text-sm">📱 ${record.celular}</div>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">HOJAS</span>
+                                <div class="font-medium text-gray-800 flex items-center gap-1.5 text-sm">📄 ${record.hojas}</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">DESCRIPCIÓN DEL TRABAJO</span>
+                            <div class="text-sm text-gray-600 italic border-l-2 border-gray-300 pl-2 mt-1 break-words">${record.descripcion || 'Sin descripción'}</div>
+                        </div>
+
+                        <div class="border-t border-gray-200 pt-3 mt-3 flex justify-between items-center">
+                            <div class="font-extrabold text-gray-900 text-base">Total: S/ ${precio.toFixed(2)}</div>
+                            <div class="font-bold text-sm ${falta ? 'text-red-600 bg-red-100/80 border border-red-200' : 'text-emerald-700 bg-emerald-100/80 border border-emerald-200'} px-3 py-1 rounded-xl">
+                                ${falta ? 'Falta: S/ ' + Math.abs(cambio).toFixed(2) : 'A Cuenta: S/ ' + pago.toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button onclick="copyClientLink('${record.codigo}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-2 rounded-2xl transition-colors shadow-md text-xs flex justify-center items-center gap-1.5">
+                            🔗 Copiar Link
+                        </button>
+                        <button onclick="sendWaLink('${record.codigo}', '${record.celular}', '${record.nombre}')" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-2 rounded-2xl transition-colors shadow-md text-xs flex justify-center items-center gap-1.5">
+                            💬 Enviar Link WA
+                        </button>
+                        <button onclick="generateReceiptPDF('${record.id}', 'print')" class="w-full bg-emerald-100 hover:bg-emerald-200 text-teal-800 font-bold py-3 px-2 rounded-2xl transition-colors text-xs flex justify-center items-center gap-1.5 border border-emerald-200">
+                            🖨️ Imprimir
+                        </button>
+                        <button onclick="hideScanResultModal()" class="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 px-2 rounded-2xl transition-colors shadow-md text-xs">
+                            Aceptar
+                        </button>
+                    </div>
+                `;
+            } else {
+                contentDiv.innerHTML = `
+                    <div class="text-center pt-4">
+                        <div class="flex items-center justify-center w-16 h-16 mx-auto bg-amber-100 rounded-full mb-4">
+                            <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                        <h3 class="text-xl font-black text-gray-900 mb-2">Código No Registrado</h3>
+                        <p class="text-sm text-gray-600 mb-6 font-medium">El código escaneado <strong class="font-mono text-gray-800">${rawText}</strong> no existe en la base de datos actual.</p>
+                        <button onclick="hideScanResultModal()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 rounded-xl transition-colors">Cerrar</button>
+                    </div>
+                `;
+            }
+            document.getElementById('scan-result-modal').classList.remove('hidden');
+        };
+
+        window.hideScanResultModal = () => document.getElementById('scan-result-modal').classList.add('hidden');
+
+        window.executeClearData = async function() {
+            if (!auth || !auth.currentUser) return;
+            const btn = document.getElementById('btn-confirm-clear');
+            btn.disabled = true; btn.innerHTML = 'Borrando...';
+            try {
+                const deletePromises = records.map(r => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'registros', r.id)));
+                await Promise.all(deletePromises);
+                showToast("Sistema reiniciado.");
+                hideClearModal();
+                document.getElementById('search-input').value = '';
+            } catch (error) {
+                showToast("Error al borrar", "error");
+            } finally {
+                btn.disabled = false; btn.innerHTML = 'Borrar Todo';
+            }
+        };
+
+        window.handleSearch = function() {
+            const query = (document.getElementById('search-input')?.value || '').trim().toLowerCase();
+            const container = document.getElementById('results-container');
+            const countEl = document.getElementById('results-count');
+
+            if (!container) return;
+
+            const filtered = records.filter(r => {
+                const code = (r.codigo || '').toLowerCase();
+                const name = (r.nombre || '').toLowerCase();
+                const phone = (r.celular || '').toLowerCase();
+                return code.includes(query) || name.includes(query) || phone.includes(query);
+            });
+
+            if (countEl) countEl.textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center text-fuchsia-400 p-6 text-sm font-medium border-2 border-dashed border-fuchsia-200 rounded-xl bg-white/50">
+                            No se encontraron registros.
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(r => {
+                const precio = Number(r.precio || 0);
+                const pago = Number(r.pago || 0);
+                const saldo = pago - precio;
+                const falta = saldo < 0;
+
+                return `
+                    <div class="bg-white p-3 rounded-xl border border-fuchsia-100 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div class="flex items-center gap-3">
+                            <span class="bg-fuchsia-600 text-white font-mono font-bold text-sm px-2.5 py-1 rounded-lg shrink-0">
+                                ${r.codigo}
+                            </span>
+                            <div>
+                                <h4 class="font-bold text-gray-900 text-sm leading-snug">${r.nombre}</h4>
+                                <div class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                    <span>📱 ${r.celular}</span>
+                                    <span>📄 ${r.hojas} h.</span>
+                                    <span class="font-bold text-fuchsia-700">📍 ${r.ubicacion}</span>
+                                </div>
+                                ${r.descripcion ? `<p class="text-xs text-gray-600 italic mt-0.5 truncate max-w-xs">${r.descripcion}</p>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
+                            <div class="text-right">
+                                <div class="text-xs font-bold text-gray-800">Total: S/ ${precio.toFixed(2)}</div>
+                                <div class="text-[11px] font-bold ${falta ? 'text-red-600' : 'text-green-600'}">
+                                    ${falta ? 'Falta: S/ ' + Math.abs(saldo).toFixed(2) : 'A cuenta: S/ ' + pago.toFixed(2)}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="showScanResultModal('${r.codigo}')" title="Ver detalles" class="p-1.5 bg-fuchsia-100 hover:bg-fuchsia-200 text-fuchsia-800 rounded-lg text-xs font-bold transition-colors">
+                                    👁️ Ver
+                                </button>
+                                <button onclick="editRecord('${r.id}')" title="Editar" class="p-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-colors">
+                                    ✏️
+                                </button>
+                                <button onclick="confirmDeleteSingle('${r.id}')" title="Eliminar" class="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-bold transition-colors">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        window.toggleScanner = function() {
+            const container = document.getElementById('scanner-container');
+            const btnText = document.getElementById('scanner-btn-text');
+
+            if (isScannerRunning) {
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().then(() => {
+                        html5QrcodeScanner.clear();
+                        isScannerRunning = false;
+                        container.classList.add('hidden');
+                        btnText.textContent = "Escanear";
+                    }).catch(err => {
+                        console.error("Error al detener cámara:", err);
+                        container.classList.add('hidden');
+                        isScannerRunning = false;
+                        btnText.textContent = "Escanear";
+                    });
+                } else {
+                    container.classList.add('hidden');
+                    isScannerRunning = false;
+                    btnText.textContent = "Escanear";
+                }
+            } else {
+                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    document.getElementById('camera-error-modal').classList.remove('hidden');
+                }
+
+                container.classList.remove('hidden');
+                btnText.textContent = "Iniciando...";
+
+                html5QrcodeScanner = new Html5Qrcode("reader");
+
+                const config = {
+                    fps: 15,
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return {
+                            width: Math.floor(minEdge * 0.75),
+                            height: Math.floor(minEdge * 0.75)
+                        };
+                    },
+                    experimentalFeatures: {
+                        useBarCodeDetectorIfSupported: true
+                    }
+                };
+
+                html5QrcodeScanner.start(
+                    { facingMode: "environment" },
+                    config,
+                    (decodedText) => {
+                        try {
+                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            const osc = ctx.createOscillator();
+                            osc.type = "sine";
+                            osc.frequency.setValueAtTime(800, ctx.currentTime);
+                            osc.connect(ctx.destination);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.1);
+                        } catch (e) {}
+
+                        showScanResultModal(decodedText);
+                        toggleScanner();
+                    },
+                    () => {}
+                ).then(() => {
+                    isScannerRunning = true;
+                    btnText.textContent = "Cerrar Cámara";
+                }).catch((err) => {
+                    console.error("Error iniciando cámara:", err);
+                    showToast("No se pudo iniciar la cámara.", "error");
+                    container.classList.add('hidden');
+                    btnText.textContent = "Escanear";
+                    isScannerRunning = false;
+                });
+            }
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initApp();
+            
+            const inpPrecio = document.getElementById('reg-precio');
+            const inpPago = document.getElementById('reg-pago');
+            const chkTogglePago = document.getElementById('toggle-pago');
+            const searchInput = document.getElementById('search-input');
+
+            if (inpPrecio) inpPrecio.addEventListener('input', calcularCambio);
+            if (inpPago) inpPago.addEventListener('input', calcularCambio);
+            
+            if (chkTogglePago) {
+                chkTogglePago.addEventListener('change', function() {
+                    if (this.checked) {
+                        inpPago.disabled = false;
+                        inpPago.classList.remove('bg-gray-100', 'border-gray-200');
+                        inpPago.classList.add('border-blue-200', 'focus:ring-0', 'focus:border-blue-500');
+                        inpPago.focus();
+                    } else {
+                        inpPago.disabled = true;
+                        inpPago.value = '';
+                        inpPago.classList.add('bg-gray-100', 'border-gray-200');
+                        inpPago.classList.remove('border-blue-200', 'focus:ring-0', 'focus:border-blue-500');
+                    }
+                    calcularCambio();
+                });
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', handleSearch);
+                searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const query = (e.target.value || '').trim();
+                        if (query) showScanResultModal(query);
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
