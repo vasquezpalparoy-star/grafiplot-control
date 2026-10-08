@@ -1,0 +1,53 @@
+name: APK Tienda Grafiplot
+on:
+  push:
+    branches: [main, codex/android-productos]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Conservar firma de las siguientes APK de prueba
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: tienda-grafiplot-debug-signing-v1
+      - name: Compilar y verificar APK
+        working-directory: android
+        run: gradle --no-daemon lintDebug assembleDebug
+      - name: Verificar nombre e identificador independientes
+        run: |
+          python - <<'PYCODE'
+          import os, subprocess
+          info = subprocess.check_output([os.environ['ANDROID_HOME'] + '/build-tools/35.0.0/aapt', 'dump', 'badging', 'android/app/build/outputs/apk/debug/app-debug.apk'], text=True)
+          assert "package: name='com.grafiplot.tienda'" in info
+          assert "application-label:'TIENDA GRAFIPLOT'" in info
+          manifest = subprocess.check_output([os.environ['ANDROID_HOME'] + '/build-tools/35.0.0/aapt', 'dump', 'xmltree', 'android/app/build/outputs/apk/debug/app-debug.apk', 'AndroidManifest.xml'], text=True)
+          activities = manifest.split('E: activity ')
+          capture = next(block for block in activities if 'com.grafiplot.control.PortraitCaptureActivity' in block)
+          assert 'android:screenOrientation' in capture and '0x1' in capture.split('android:screenOrientation', 1)[1].split('\n', 1)[0]
+          print('Verificado: escáner dedicado con orientación portrait')
+          print('Verificado: TIENDA GRAFIPLOT / com.grafiplot.tienda')
+          PYCODE
+      - name: Preparar archivo
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Tienda-Grafiplot-vertical.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tienda-Grafiplot-APK
+          path: Tienda-Grafiplot-vertical.apk
+          retention-days: 90

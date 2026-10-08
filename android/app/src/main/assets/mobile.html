@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TIENDA GRAFIPLOT</title><link rel="stylesheet" href="mobile.css"></head>
+<body>
+<header><img src="logo.png" alt="Grafiplot"><div><strong>Tienda Grafiplot</strong><small>Tu inventario, a la mano</small></div><span id="status" role="status">Conectando…</span></header>
+<main>
+<section id="home">
+<h1>¿Qué producto necesitas?</h1><p>Escanea su etiqueta o busca por nombre y código.</p>
+<button class="primary scan" id="scan">▣ Escanear código</button>
+<form id="searchForm" class="search"><label for="query">Nombre o código del producto</label><div><input id="query" type="search" placeholder="Ej. papel bond o 775123…" autocomplete="off"><button type="submit" aria-label="Buscar">Buscar</button></div></form>
+<div class="row"><h2 id="count">Productos</h2><button id="add" class="secondary">＋ Agregar</button></div>
+<p id="cacheNote" class="note" hidden>Datos guardados en este dispositivo. Conéctate para recibir cambios.</p><div id="results" aria-live="polite"></div>
+</section>
+<section id="detail" hidden><button class="back" id="backDetail">← Volver a buscar</button><div id="detailContent"></div></section>
+<section id="create" hidden><button class="back" id="backCreate">← Volver</button><h1>Agregar producto</h1><p>Aparecerá también en el sistema de Grafiplot.</p>
+<form id="productForm">
+<label>Nombre *<input name="name" required maxlength="200" placeholder="Ej. Papel bond A4"></label>
+<label>Código de barras o QR *<div class="code"><input name="barcode" required maxlength="256" autocomplete="off"><button type="button" id="scanForm" aria-label="Escanear código del nuevo producto">▣</button></div></label>
+<label>Descripción<textarea name="description" rows="3" maxlength="4000" placeholder="Características y detalles"></textarea></label>
+<div class="grid"><label>Precio de venta (S/) *<input name="price" type="number" required min="0" max="999999999" step="0.01" inputmode="decimal"></label><label>Stock *<input name="stock" type="number" required min="0" max="999999999" step="1" value="0" inputmode="numeric"></label></div>
+<label>Unidad<select name="measureUnit"><option>Unidades</option><option>Metros</option><option>Rollos</option><option>Paquetes</option><option>Cajas</option><option>Hojas</option><option>Litros</option><option>Kilogramos</option></select></label>
+<label>Ubicación<input name="location" maxlength="300" placeholder="Almacén, pasillo, estante"></label>
+<label>Fila o nivel<input name="coordinates" maxlength="300" placeholder="Ej. Fila 3, nivel 2"></label>
+<label>Cómo encontrarlo<input name="locationNotes" maxlength="500" placeholder="Ej. Caja roja al fondo"></label>
+<details><summary>Foto y otros precios (opcional)</summary><label>Enlace HTTPS de la foto<input name="imageUrl" type="url" placeholder="https://…"></label><label>Foto de la ubicación<input name="locationImageUrl" type="url" placeholder="https://…"></label><div class="grid"><label>Precio por mayor (S/)<input name="bulkPrice" type="number" min="0" max="999999999" step="0.01" inputmode="decimal"></label><label>Precio de compra (S/)<input name="purchasePrice" type="number" min="0" max="999999999" step="0.01" inputmode="decimal"></label></div></details>
+<button id="save" class="primary" type="submit" disabled>Guardar producto</button><p class="note">Sin conexión, los cambios quedan pendientes y se envían al volver a conectarte. El primer ingreso requiere Internet.</p>
+</form></section>
+</main><div id="notice" role="status" hidden></div><script type="module" src="mobile.js"></script></body></html>
