@@ -1,4 +1,4 @@
-name: APK Grafiplot
+name: APK Tienda Grafiplot
 on:
   push:
     branches: [main, codex/android-productos]
@@ -25,10 +25,19 @@ jobs:
       - name: Compilar y verificar APK
         working-directory: android
         run: gradle --no-daemon lintDebug assembleDebug
+      - name: Verificar nombre e identificador independientes
+        run: |
+          python - <<'PYCODE'
+          import os, subprocess
+          info = subprocess.check_output([os.environ['ANDROID_HOME'] + '/build-tools/35.0.0/aapt', 'dump', 'badging', 'android/app/build/outputs/apk/debug/app-debug.apk'], text=True)
+          assert "package: name='com.grafiplot.tienda'" in info
+          assert "application-label:'TIENDA GRAFIPLOT'" in info
+          print('Verificado: TIENDA GRAFIPLOT / com.grafiplot.tienda')
+          PYCODE
       - name: Preparar archivo
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Grafiplot.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Tienda-Grafiplot.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Grafiplot-APK
-          path: Grafiplot.apk
+          name: Tienda-Grafiplot-APK
+          path: Tienda-Grafiplot.apk
           retention-days: 90

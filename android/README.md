@@ -1,10 +1,12 @@
-# Grafiplot para Android
+# TIENDA GRAFIPLOT para Android
+
+Nombre en Android: **TIENDA GRAFIPLOT**. Identificador independiente: `com.grafiplot.tienda`; se instala junto a la app original y no la reemplaza.
 
 Aplicación para trabajadores: escanear códigos de barras y QR, ingresar un código, buscar por nombre, consultar precios, existencias, fotos y ubicación, y agregar productos.
 
 ## Instalación
 
-En GitHub → Actions → **APK Grafiplot**, abre una ejecución terminada correctamente y descarga **Grafiplot-APK**. Descomprime el ZIP e instala `Grafiplot.apk` en Android 7.0 o posterior. Permite la instalación desde esa fuente cuando Android lo solicite. La cámara se solicita solo al escanear. Si se deniega, puedes ingresar el código manualmente.
+En GitHub → Actions → **APK Tienda Grafiplot**, abre una ejecución terminada correctamente y descarga **Tienda-Grafiplot-APK**. Descomprime el ZIP e instala `Tienda-Grafiplot.apk` en Android 7.0 o posterior. Permite la instalación desde esa fuente cuando Android lo solicite. La cámara se solicita solo al escanear. Si se deniega, puedes ingresar el código manualmente.
 
 La primera apertura requiere Internet. Se usa el mismo proyecto Firebase `imventario-105b7`, autenticación anónima y colección `inventory` que `index.html`; no se crea otro inventario. Firebase debe permitir la autenticación anónima y las operaciones correspondientes en sus reglas existentes. Esta app respeta esas reglas y no las modifica. Si falla la conexión o se rechaza una escritura, se informa al usuario.
 
