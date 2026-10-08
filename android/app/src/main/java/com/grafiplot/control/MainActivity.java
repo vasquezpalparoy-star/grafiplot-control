@@ -59,8 +59,14 @@ public class MainActivity extends AppCompatActivity {
                 (view, message, origin, mainFrame, reply) -> {
                     if (mainFrame && "scan".equals(message.getData()) && !scanning) {
                         scanning = true;
-                        scanner.launch(new ScanOptions().setDesiredBarcodeFormats(ScanOptions.ALL_CODE_TYPES)
-                            .setPrompt("Coloca el código dentro del recuadro").setBeepEnabled(true).setOrientationLocked(false));
+                        scanner.launch(new ScanOptions()
+                            .setCaptureActivity(PortraitCaptureActivity.class)
+                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE, ScanOptions.EAN_13, ScanOptions.EAN_8,
+                                ScanOptions.UPC_A, ScanOptions.UPC_E, ScanOptions.CODE_128, ScanOptions.CODE_39,
+                                ScanOptions.CODE_93, ScanOptions.ITF, ScanOptions.RSS_14, ScanOptions.RSS_EXPANDED,
+                                ScanOptions.DATA_MATRIX, ScanOptions.PDF_417)
+                            .setPrompt("Mantén el móvil vertical. Centra el QR o código de barras en el recuadro.")
+                            .setBeepEnabled(true).setOrientationLocked(true));
                     }
                 });
         } else Toast.makeText(this, "Actualiza Android System WebView para usar el escáner", Toast.LENGTH_LONG).show();
